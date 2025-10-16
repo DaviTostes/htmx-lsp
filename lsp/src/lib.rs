@@ -8,12 +8,12 @@ use anyhow::Result;
 use htmx::HxDocItem;
 use log::{debug, error, info, warn};
 use lsp_types::{
-    ClientInfo, CompletionItem, CompletionItemKind, CompletionList, HoverContents,
+    CompletionItem, CompletionItemKind, CompletionList, HoverContents,
     InitializeParams, MarkupContent, ServerCapabilities, TextDocumentSyncCapability,
     TextDocumentSyncKind, WorkDoneProgressOptions,
 };
 
-use lsp_server::{Connection, Message, Response};
+use lsp_server::{Connection, ErrorCode, Message, Response};
 
 use crate::{
     handle::{handle_notification, handle_other, handle_request, HtmxResult},
@@ -106,8 +106,18 @@ fn main_loop(connection: Connection, params: serde_json::Value) -> Result<()> {
                 }))
             }
             None => {
-                // Don't send responses with result: None as they cause INVALID_SERVER_MESSAGE errors
-                // Simply skip sending responses for unsupported requests to avoid client errors
+                // For non-HTMX messages, send an error response instead of continuing
+                if let Some(id) = id {
+                    connection.sender.send(Message::Response(Response {
+                        id,
+                        result: None,
+                        error: Some(lsp_server::ResponseError {
+                            code: ErrorCode::InvalidRequest as i32,
+                            message: "HTMX LSP does not handle this request type".to_string(),
+                            data: None,
+                        }),
+                    }))?;
+                }
                 continue;
             }
         } {
