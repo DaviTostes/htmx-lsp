@@ -106,9 +106,17 @@ fn main_loop(connection: Connection, params: serde_json::Value) -> Result<()> {
                 }))
             }
             None => {
-                // Don't send responses with result: None as they cause INVALID_SERVER_MESSAGE errors
-                // Simply skip sending responses for unsupported requests to avoid client errors
-                continue;
+                // Sending a response with `result == None` will crash the helix client
+                let id = match (id, &params.client_info) {
+                    (_, Some(ClientInfo { name, .. })) if name.eq("helix") => continue,
+                    (Some(id), _) => id,
+                    _ => continue,
+                };
+                connection.sender.send(Message::Response(Response {
+                    id,
+                    result: None,
+                    error: None,
+                }))
             }
         } {
             Ok(_) => {}
